@@ -1,0 +1,6 @@
+{
+  "name": "ToonVoice FX - Cartoon Voice Studio",
+  "description": "Professional cartoon character voice designer with real-time pitch, speed, and emotion DSP effects, audio recording, waveform editing, and voice profile library.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
