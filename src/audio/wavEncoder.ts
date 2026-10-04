@@ -2,6 +2,7 @@
  * Encodes an AudioBuffer to standard uncompressed WAV format
  * Supports 16-bit and 24-bit PCM
  */
+import { Mp3Encoder } from 'lamejs';
 
 export interface WavEncodeOptions {
   bitDepth?: 16 | 24;
@@ -103,27 +104,34 @@ export function audioBufferToWav(
 
 export async function audioBufferToMp3(
   buffer: AudioBuffer,
-  filename = 'audio.mp3'
+  _filename = 'audio.mp3'
 ): Promise<Blob> {
-  // First convert to 16-bit WAV
-  const wavBlob = audioBufferToWav(buffer, { bitDepth: 16 });
-  
-  const res = await fetch('/api/encode-mp3', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/octet-stream',
-      'x-filename': encodeURIComponent(filename),
-    },
-    body: wavBlob,
-  });
+  const channels = Math.min(buffer.numberOfChannels, 2);
+  const encoder = new Mp3Encoder(channels, buffer.sampleRate, 320);
+  const channelData = Array.from({ length: channels }, (_, channel) => buffer.getChannelData(channel));
+  const mp3Chunks: ArrayBuffer[] = [];
+  const chunkSize = 1152;
 
-  if (!res.ok) {
-    const errJson = await res.json().catch(() => ({}));
-    throw new Error(errJson.error || `MP3 encoding failed with status ${res.status}`);
+  for (let offset = 0; offset < buffer.length; offset += chunkSize) {
+    const end = Math.min(offset + chunkSize, buffer.length);
+    const toPcm = (samples: Float32Array) => {
+      const pcm = new Int16Array(end - offset);
+      for (let index = offset; index < end; index++) {
+        const sample = Math.max(-1, Math.min(1, samples[index]));
+        pcm[index - offset] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+      }
+      return pcm;
+    };
+
+    const encoded = channels === 1
+      ? encoder.encodeBuffer(toPcm(channelData[0]))
+      : encoder.encodeBuffer(toPcm(channelData[0]), toPcm(channelData[1]));
+    if (encoded.length > 0) mp3Chunks.push(new Uint8Array(encoded).buffer as ArrayBuffer);
   }
 
-  const mp3ArrayBuffer = await res.arrayBuffer();
-  return new Blob([mp3ArrayBuffer], { type: 'audio/mpeg' });
+  const finalChunk = encoder.flush();
+  if (finalChunk.length > 0) mp3Chunks.push(new Uint8Array(finalChunk).buffer as ArrayBuffer);
+  return new Blob(mp3Chunks, { type: 'audio/mpeg' });
 }
 
 export function downloadBlob(blob: Blob, filename: string) {

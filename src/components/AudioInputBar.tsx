@@ -219,13 +219,13 @@ export const AudioInputBar: React.FC<AudioInputBarProps> = ({
                 Upload Audio Snippet
                 <input
                   type="file"
-                  accept="audio/*,.wav,.mp3,.ogg,.wma,.m4a,.aac,.flac,.webm"
+                  accept="audio/*,.wav,.mp3,.ogg,.m4a,.aac,.flac,.webm"
                   onChange={handleFileChange}
                   className="hidden"
                 />
               </label>
               <p className="text-[10px] text-neutral-500">
-                WAV, MP3, OGG, WMA, M4A, FLAC, WebM (drop or click)
+                WAV, MP3, OGG, AAC, M4A, FLAC, WebM (browser support varies)
               </p>
             </div>
           </div>

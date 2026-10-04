@@ -549,98 +549,15 @@ class AudioEngine {
     return rendered;
   }
 
-  /**
-   * Decodes an uploaded audio file (WAV, MP3, OGG, WMA, M4A, FLAC, WebM, etc.)
-   * Includes FFmpeg transcoding support for all WMA formats
-   */
+  /** Decodes uploaded audio using the browser's built-in codec support. */
   public async decodeAudioFile(file: File): Promise<AudioBuffer> {
-    const isWma = file.name.toLowerCase().endsWith('.wma') || file.type.toLowerCase().includes('wma');
-    
-    // For WMA files, route directly to the server transcoder
-    if (isWma) {
-      try {
-        return await this.convertAndDecodeViaServer(file);
-      } catch (wmaErr) {
-        console.warn('Direct WMA transcoding error, falling back to local decoder...', wmaErr);
-      }
-    }
-
-    const arrayBuffer = await file.arrayBuffer();
     const ctx = this.getContext();
     try {
-      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-      return audioBuffer;
+      return await ctx.decodeAudioData(await file.arrayBuffer());
     } catch {
-      // If native decode fails (e.g. encoded WMA, AMR, or uncommon codec), transcode via FFmpeg backend
-      try {
-        return await this.convertAndDecodeViaServer(file);
-      } catch (serverErr) {
-        // Final fallback via HTML Audio element
-        return await this.decodeViaAudioElement(file);
-      }
+      const format = file.name.split('.').pop()?.toUpperCase() || 'this';
+      throw new Error(`This browser cannot decode ${format} audio. Convert it to WAV, MP3, or AAC and try again.`);
     }
-  }
-
-  /**
-   * Transcodes audio via the backend FFmpeg converter for full format support (including all WMA versions)
-   */
-  private async convertAndDecodeViaServer(file: File): Promise<AudioBuffer> {
-    const res = await fetch('/api/convert-audio', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/octet-stream',
-        'x-filename': encodeURIComponent(file.name),
-      },
-      body: file,
-    });
-
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}));
-      throw new Error(errJson.error || `Audio transcoding failed with status ${res.status}`);
-    }
-
-    const wavArrayBuffer = await res.arrayBuffer();
-    const ctx = this.getContext();
-    return await ctx.decodeAudioData(wavArrayBuffer);
-  }
-
-  /**
-   * Fallback decoder using an Audio element and MediaElementAudioSourceNode
-   */
-  private async decodeViaAudioElement(file: File): Promise<AudioBuffer> {
-    return new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(file);
-      const audio = new Audio();
-      audio.src = url;
-
-      audio.oncanplaythrough = async () => {
-        try {
-          const duration = audio.duration;
-          if (!duration || isNaN(duration) || duration <= 0) {
-            URL.revokeObjectURL(url);
-            reject(new Error('Could not parse audio file duration'));
-            return;
-          }
-
-          // Use OfflineAudioContext to capture
-          const ctx = this.getContext();
-          // Fetch raw arrayBuffer again to check
-          const res = await fetch(url);
-          const buf = await res.arrayBuffer();
-          const decoded = await ctx.decodeAudioData(buf);
-          URL.revokeObjectURL(url);
-          resolve(decoded);
-        } catch (err) {
-          URL.revokeObjectURL(url);
-          reject(new Error(`Failed to decode audio file: ${(err as Error).message}`));
-        }
-      };
-
-      audio.onerror = () => {
-        URL.revokeObjectURL(url);
-        reject(new Error('Unsupported or corrupted audio format'));
-      };
-    });
   }
 
   /**
